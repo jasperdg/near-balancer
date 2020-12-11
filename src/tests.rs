@@ -72,4 +72,6 @@ mod factory_tests;
 mod pool_initiation_test;
 mod pricing_tests;
 mod dynamic_pool_tests;
+mod swap_tests;
 mod init_tests;
+mod math_tests;

@@ -24,7 +24,8 @@ use crate::constants::{
     EXIT_FEE,
     MIN_BALANCE,
     MAX_TOTAL_WEIGHT,
-    INIT_POOL_SUPPLY
+    INIT_POOL_SUPPLY,
+    MAX_IN_RATIO
 };
 
 use crate::math;
@@ -61,7 +62,7 @@ impl Pool {
         swap_fee: u128
     ) -> Self {
         assert!(swap_fee <= MAX_FEE, "ERR_MAX_FEE");
-        assert!(swap_fee >= MIN_FEE, "ERR_MIN_FEE");
+        // assert!(swap_fee >= MIN_FEE, "ERR_MIN_FEE"); // TODO: Turn on
 
         Self {
             id,
@@ -329,6 +330,67 @@ impl Pool {
             self.records.insert(&token, &record);
             // Transfer token to user
         }
+    }
 
+    pub fn swap_exact_amount_in(
+        &mut self,
+        sender: &AccountId,
+        token_in: &AccountId,
+        token_amount_in: u128,
+        token_out: &AccountId,
+        min_amount_out: u128,
+        max_price: u128
+    ) -> (u128, u128) {
+        assert!(self.is_bound(token_in), "ERR_NOT_BOUND");
+        assert!(self.is_bound(token_out), "ERR_NOT_BOUND");
+        assert!(self.finalized, "ERR_NOT_FINALIZED");
+
+        let mut in_record = self.records.get(token_in).expect("ERR_NO_RECORD");
+        let mut out_record = self.records.get(token_out).expect("ERR_NO_RECORD");
+
+        assert!(token_amount_in <= math::mul_u128(in_record.balance, MAX_IN_RATIO), "ERR_MAX_IN_RATIO");
+
+        let spot_price_before = math::calc_spot_price(
+            in_record.balance, 
+            in_record.denorm, 
+            out_record.balance, 
+            out_record.denorm, 
+            self.swap_fee
+        );
+        
+        assert!(spot_price_before <= max_price, "ERR_BAD_LIMIT_PRICE");
+        
+        let token_amount_out = math::calc_out_given_in(
+            in_record.balance,
+            in_record.denorm,
+            out_record.balance,
+            out_record.denorm,
+            token_amount_in, 
+            self.swap_fee
+        );
+
+        assert!(token_amount_out >= min_amount_out, "ERR_LIMIT_OUT");
+
+        in_record.balance += token_amount_in;
+        out_record.balance -= token_amount_out;
+
+        let spot_price_after = math::calc_spot_price(
+            in_record.balance, 
+            in_record.denorm, 
+            out_record.balance, 
+            out_record.denorm, 
+            self.swap_fee
+        );
+        
+        assert!(spot_price_after >= spot_price_before, "ERR_MATH_APPROX");
+        assert!(spot_price_after <= max_price, "ERR_LIMIT_PRICE");
+        assert!(spot_price_before <= math::div_u128(token_amount_in, token_amount_out), "ERR_MATH_APPROX");
+
+        // TODO: LOG swap
+        // TODO: transfer in_token from sender to contract
+        // TODO: transfer out_token from contract to sender
+        self.records.insert(&token_in, &in_record);
+        self.records.insert(&token_out, &out_record);
+        (token_amount_out, spot_price_after)
     }
 }

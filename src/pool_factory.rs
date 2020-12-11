@@ -271,4 +271,28 @@ impl PoolFactory {
         );
         self.pools.insert(&pool_id.into(), &pool);
     }
+
+    pub fn swap_exact_amount_in(
+        &mut self, 
+        pool_id: U64,
+        token_in: &AccountId,
+        token_amount_in: U128,
+        token_out: &AccountId,
+        min_amount_out: U128,
+        max_price: U128
+    ) -> (U128, U128) {
+        let mut pool = self.pools.get(&pool_id.into()).expect("ERR_NO_POOL");
+        let (token_amount_out, spot_price_after) = pool.swap_exact_amount_in(
+            &env::predecessor_account_id(),
+            token_in,
+            token_amount_in.into(),
+            token_out,
+            min_amount_out.into(),
+            max_price.into()
+        );
+
+        self.pools.insert(&pool_id.into(), &pool);
+
+        (token_amount_out.into(), spot_price_after.into())
+    }
 }
