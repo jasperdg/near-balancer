@@ -26,7 +26,7 @@ fn test_finalized_even_pool_pricing_sans_fee() {
     let price_token_a = contract.get_pool_spot_price_sans_fee(pool_id, &token_b(), &token_a());
     let price_token_b = contract.get_pool_spot_price_sans_fee(pool_id, &token_a(), &token_b());
 
-    let expected_spot_price = U128(1000000000000000000);
+    let expected_spot_price = U128(to_token_denom(1));
     assert_eq!(price_token_a, expected_spot_price);
     assert_eq!(price_token_b, expected_spot_price);
 }

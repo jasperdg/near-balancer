@@ -9,6 +9,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 #[allow(dead_code)]
 mod pool_factory;
 mod pool;
+mod token;
 mod constants;
 mod math;
 

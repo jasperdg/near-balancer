@@ -1,5 +1,8 @@
 use super::*;
 
+use crate::constants::{
+    INIT_POOL_SUPPLY
+};
 
 #[test]
 fn pool_initial_state_test() {
@@ -82,6 +85,9 @@ fn bind_rebind_finalize_valid_pool() {
     let balance_b = contract.get_pool_balance(pool_id, &token_b());
 
     assert_eq!(balance_b, U128(to_token_denom(300)));
+
+    let owner_pool_tokens: u128 = contract.get_pool_token_balance(pool_id, &alice()).into();
+    assert_eq!(owner_pool_tokens, INIT_POOL_SUPPLY);
 }
 
 #[test]
@@ -89,7 +95,7 @@ fn bind_rebind_finalize_valid_pool() {
 fn get_non_existing_pool_info_test() {
     let context = get_context(alice(), 0);
     testing_env!(context);
-    let mut contract = PoolFactory::init(alice());
+    let contract = PoolFactory::init(alice());
     assert_eq!(contract.pool_is_finalized(U64(1)), false);
 }
 
@@ -118,6 +124,7 @@ fn pool_final_tokens_fail_test() {
 // TODO: Test denorm and balance bound assertions (min weight, max weight, min balance)
 
 // Unbind
+// TODO: Test Unbind
 // TODO: Test Unbinding unbound token
 // TODO: Test unbinding for finalized pool
 

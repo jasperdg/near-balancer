@@ -69,10 +69,27 @@ impl PoolFactory {
     }
 
     /*** POOL_GETTERS ***/
+
+    pub fn get_pool_token_total_supply(
+        &self, 
+        pool_id: U64
+    ) -> U128 {
+        let pool = self.pools.get(&pool_id.into()).expect("ERR_NO_POOL");
+        pool.get_pool_token_total_supply().into()
+    }
+
+    pub fn get_pool_token_balance(
+        &self, 
+        pool_id: U64, 
+        account_id: &AccountId
+    ) -> U128 {
+        let pool = self.pools.get(&pool_id.into()).expect("ERR_NO_POOL");
+        pool.get_pool_token_balance(account_id).into()
+    }
     
     pub fn pool_exists(&self, pool_id: U64) -> bool {
         match self.pools.get(&pool_id.into()) {
-            Some(pool) => true,
+            Some(_pool) => true,
             None => false
         }
     }
@@ -223,5 +240,35 @@ impl PoolFactory {
     ) -> U128 {
         let pool = self.pools.get(&pool_id.into()).expect("ERR_NO_POOL");
         pool.get_spot_price_sans_fee(token_in, token_out).into()
+    }
+
+    pub fn join_pool(
+        &mut self,
+        pool_id: U64,
+        pool_amount_out: U128,
+        max_amounts_in: Vec<U128>,
+    ) {
+        let mut pool = self.pools.get(&pool_id.into()).expect("ERR_NO_POOL");
+        pool.join_pool(
+            &env::predecessor_account_id(), 
+            pool_amount_out.into(),
+            max_amounts_in
+        );
+        self.pools.insert(&pool_id.into(), &pool);
+    }
+
+    pub fn exit_pool(
+        &mut self,
+        pool_id: U64,
+        pool_amount_in: U128,
+        min_amounts_out: Vec<U128>,
+    ) {
+        let mut pool = self.pools.get(&pool_id.into()).expect("ERR_NO_POOL");
+        pool.exit_pool(
+            &env::predecessor_account_id(), 
+            pool_amount_in.into(),
+            min_amounts_out
+        );
+        self.pools.insert(&pool_id.into(), &pool);
     }
 }

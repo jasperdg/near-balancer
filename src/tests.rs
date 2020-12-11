@@ -58,7 +58,7 @@ fn get_context(
         epoch_height: 0,
         account_balance: 0,
         is_view: false,
-        storage_usage: 0,
+        storage_usage: 10000,
         block_timestamp,
         account_locked_balance: 0,
         attached_deposit: 0,
@@ -71,4 +71,5 @@ fn get_context(
 mod factory_tests;
 mod pool_initiation_test;
 mod pricing_tests;
+mod dynamic_pool_tests;
 mod init_tests;

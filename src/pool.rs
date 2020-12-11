@@ -1,6 +1,9 @@
 use std::cmp::Ordering;
 use near_sdk::{
     env,
+    json_types::{
+        U128
+    },
     AccountId,
     borsh::{
         BorshDeserialize, BorshSerialize
@@ -25,10 +28,9 @@ use crate::constants::{
 };
 
 use crate::math;
+use crate::token::FungibleTokenVault;
 
-// import Fun token
-
-#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(BorshDeserialize, BorshSerialize, Debug)]
 pub struct Record {
     pub bound: bool, // is this token record bound to the pool
     pub index: u64, // index of this record in list of records
@@ -43,6 +45,7 @@ pub struct Pool {
     swap_fee: u128,
     finalized: bool,
     controller: AccountId,
+    token: FungibleTokenVault,
     pub records: UnorderedMap<AccountId, Record>,
     pub tokens: Vector<AccountId>
 }
@@ -66,6 +69,7 @@ impl Pool {
             swap_fee,
             finalized: false,
             controller: sender,
+            token: FungibleTokenVault::new(id),
             records: UnorderedMap::new(format!("records:{}", id).as_bytes().to_vec()),
             tokens: Vector::new(format!("tokens:{}", id).as_bytes().to_vec()),
         }
@@ -106,6 +110,14 @@ impl Pool {
             .balance
     }
 
+    pub fn get_pool_token_balance(&self, account_id: &AccountId) -> u128 {
+        self.token.get_balance(account_id)
+    }
+ 
+    pub fn get_pool_token_total_supply(&self) -> u128 {
+        self.token.total_supply()
+    }
+
     pub fn get_swap_fee(&self) -> u128 {
         self.swap_fee
     }
@@ -116,9 +128,7 @@ impl Pool {
         assert_eq!(sender, &self.controller, "ERR_NO_CONTROLLER");
 
         self.finalized = true;
-
-        // mint pool tokens accordingly token.mint(INIT_POOL_SUPPLY)
-        // token.transfer(env::predecessor_account(), INIT_POOL_SUPPLY)
+        self.token.mint(INIT_POOL_SUPPLY, sender);
     }
 
     pub fn bind(&mut self, 
@@ -177,7 +187,7 @@ impl Pool {
 
         record.denorm = denorm;
 
-        let old_balance = record.balance;
+        // let old_balance = record.balance;
         record.balance = balance;
 
         self.records.insert(token_account_id, &record);
@@ -222,7 +232,7 @@ impl Pool {
         // token(token_account_id).transfer(env::predecessor_account(), token_balance - token_exit_fee)
     }
 
-    // TODO: Gulp function requires async balance checks
+    // TODO: Gulp function requires async balance checks, will only work when pools are sharded
 
     pub fn get_spot_price(
         &self, 
@@ -248,5 +258,77 @@ impl Pool {
         let record_out = self.records.get(token_out).expect("ERR_NO_RECORD");
 
         math::calc_spot_price(record_in.balance, record_in.denorm, record_out.balance, record_out.denorm, 0)
+    }
+
+    pub fn join_pool(
+        &mut self,
+        sender: &AccountId,
+        pool_amount_out: u128,
+        max_amounts_in: Vec<U128>
+    ) {
+        assert!(self.finalized, "ERR_NOT_FINALIZED");
+        assert_eq!(max_amounts_in.len() as u64, self.get_num_tokens(), "ERR_AMOUNTS_LEN");
+
+        let pool_total = self.token.total_supply();
+        let ratio = math::div_u128(pool_amount_out, pool_total);
+        assert_ne!(ratio, 0, "ERR_MATH_APPROX");
+
+        for (i, token) in self.tokens.iter().enumerate() {
+            let mut record = self.records
+                .get(&token)
+                .expect("ERR_NO_RECORD");
+
+            let balance = record.balance;
+            
+            let token_amount_in = math::mul_u128(ratio, balance);
+
+            assert_ne!(token_amount_in, 0, "ERR_MATH_APPROX");
+            assert!(token_amount_in <= u128::from(max_amounts_in[i]), "ERR_LIMIT_IN");
+
+            record.balance += token_amount_in;
+            
+            self.records.insert(&token, &record);
+
+            // TODO: Transfer tokens in from user
+        }
+
+        self.token.mint(pool_amount_out, sender);
+    }
+
+    pub fn exit_pool(
+        &mut self,
+        sender: &AccountId,
+        pool_amount_in: u128,
+        min_amounts_out: Vec<U128>
+    ) {
+        assert!(self.finalized, "ERR_NOT_FINALIZED");
+        assert_eq!(min_amounts_out.len() as u64, self.get_num_tokens(), "ERR_AMOUNTS_LEN");
+
+        let pool_total = self.token.total_supply();
+        let exit_fee = math::mul_u128(pool_amount_in, EXIT_FEE);
+        let pool_amount_in_min_exit_fee = pool_amount_in - exit_fee;
+        let ratio = math::div_u128(pool_amount_in_min_exit_fee, pool_total);
+        assert_ne!(ratio, 0, "ERR_MATH_APPROX");
+
+        // Make sure this method is called by on_vault_received I think? 
+        // Burn `pool_amount_in` pool_tokens 
+        // TODO: Temp burn fn
+        self.token.faux_burn(pool_amount_in);
+        for (i, token) in self.tokens.iter().enumerate() {
+            let mut record = self.records
+                .get(&token)
+                .expect("ERR_NO_RECORD");
+            let balance = record.balance;
+            let token_amount_out = math::mul_u128(ratio, balance);
+            
+            assert_ne!(token_amount_out, 0, "ERR_MATH_APPROX");
+            assert!(token_amount_out >= u128::from(min_amounts_out[i]), "ERR_LIMIT_OUT");
+
+            record.balance -= token_amount_out;
+
+            self.records.insert(&token, &record);
+            // Transfer token to user
+        }
+
     }
 }
